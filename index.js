@@ -67,7 +67,39 @@ const server = http.createServer( ( req, res ) => {
 
 			return
 		}
-		else if ( req.method === "PATCH" ) {}
+		else if ( req.method === "PATCH" ) {
+
+			let body = ""
+
+			req.on( "data", data => body += data )
+
+			req.on( "end", () => {
+
+				try {
+
+					const { username, key, value } = JSON.parse( body )
+
+					if ( !( username in users ) ) {
+
+						res.writeHead( 400, { "Content-Type": "application/json" } )
+						res.end( JSON.stringify( { error: `${ username } is not exists.` } ) )
+
+						return
+					}
+
+					users[ username ][ key ] = value
+
+					res.writeHead( 200, { "Content-Type": "application/json" } ).end( JSON.stringify( users[ username ] ) )
+				}
+				catch( error ) {
+
+					res.writeHead( 400, { "Content-Type": "application/json" } )
+					res.end( JSON.stringify( { error: error.message } ) )
+				}
+			} )
+
+			return
+		}
 		else if ( req.method === "DELETE" ) {
 
 			let body = ""
