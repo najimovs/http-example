@@ -6,10 +6,62 @@ const users = {}
 
 function generateID() {
 
-	return Object.keys( users ).length + 1
+	let maxID = 0
+
+	for ( const username in users ) {
+
+		maxID = Math.max( maxID, users[ username ].id )
+	}
+
+	return maxID + 1
+}
+
+function bodyParserMiddleware( originalRequest, originalResponse, next ) {
+
+	let body = ""
+	let useBody = false
+
+	originalRequest.on( "data", data => {
+
+		useBody = true
+
+		body += data
+	} )
+
+	originalRequest.on( "end", () => {
+
+		if ( !useBody ) {
+
+			next( originalRequest, originalResponse )
+		}
+		else {
+
+			try {
+
+				console.log( body )
+
+				const json = JSON.parse( body )
+
+				originalRequest.body = json
+
+				next( originalRequest, originalResponse )
+			}
+			catch( error ) {
+
+				console.error( error )
+
+				originalResponse.end()
+			}
+		}
+	} )
 }
 
 const server = http.createServer( ( req, res ) => {
+
+	bodyParserMiddleware( req, res, handleServer )
+} )
+
+function handleServer( req, res ) {
 
 	if ( req.url === "/health" ) {
 
@@ -29,117 +81,91 @@ const server = http.createServer( ( req, res ) => {
 		}
 		else if ( req.method === "POST" ) {
 
-			let body = ""
+			const { username, gender, birthYear } = req.body
 
-			req.on( "data", data => body += data )
+			if ( username in users ) {
 
-			req.on( "end", () => {
+				res.writeHead( 400, { "Content-Type": "application/json" } )
+				res.end( JSON.stringify( { error: `${ username } is already exists.` } ) )
 
-				try {
+				return
+			}
 
-					const { username, gender, birthYear } = JSON.parse( body )
+			const newUser = {
+				id: generateID(),
+				username,
+				gender,
+				birthYear,
+			}
 
-					if ( username in users ) {
+			users[ username ] = newUser
 
-						res.writeHead( 400, { "Content-Type": "application/json" } )
-						res.end( JSON.stringify( { error: `${ username } is already exists.` } ) )
-
-						return
-					}
-
-					const newUser = {
-						id: generateID(),
-						username,
-						gender,
-						birthYear,
-					}
-
-					users[ username ] = newUser
-
-					res.writeHead( 201, { "Content-Type": "application/json" } ).end( JSON.stringify( newUser ) )
-				}
-				catch( error ) {
-
-					res.writeHead( 400, { "Content-Type": "application/json" } )
-					res.end( JSON.stringify( { error: error.message } ) )
-				}
-			} )
+			res.writeHead( 201, { "Content-Type": "application/json" } ).end( JSON.stringify( newUser ) )
 
 			return
 		}
 		else if ( req.method === "PATCH" ) {
 
-			let body = ""
+			const { username, key, value } = req.body
 
-			req.on( "data", data => body += data )
+			if ( !( username in users ) ) {
 
-			req.on( "end", () => {
+				res.writeHead( 400, { "Content-Type": "application/json" } )
+				res.end( JSON.stringify( { error: `${ username } is not exists.` } ) )
 
-				try {
+				return
+			}
 
-					const { username, key, value } = JSON.parse( body )
+			users[ username ][ key ] = value
 
-					if ( !( username in users ) ) {
-
-						res.writeHead( 400, { "Content-Type": "application/json" } )
-						res.end( JSON.stringify( { error: `${ username } is not exists.` } ) )
-
-						return
-					}
-
-					users[ username ][ key ] = value
-
-					res.writeHead( 200, { "Content-Type": "application/json" } ).end( JSON.stringify( users[ username ] ) )
-				}
-				catch( error ) {
-
-					res.writeHead( 400, { "Content-Type": "application/json" } )
-					res.end( JSON.stringify( { error: error.message } ) )
-				}
-			} )
+			res.writeHead( 200, { "Content-Type": "application/json" } ).end( JSON.stringify( users[ username ] ) )
 
 			return
 		}
 		else if ( req.method === "DELETE" ) {
 
-			let body = ""
+			const { username } = req.body
 
-			req.on( "data", data => body += data )
+			if ( !( username in users ) ) {
 
-			req.on( "end", () => {
+				res.writeHead( 400, { "Content-Type": "application/json" } )
+				res.end( JSON.stringify( { error: `${ username } is not exists.` } ) )
 
-				try {
+				return
+			}
 
-					const { username } = JSON.parse( body )
+			delete users[ username ]
 
-					if ( !( username in users ) ) {
-
-						res.writeHead( 400, { "Content-Type": "application/json" } )
-						res.end( JSON.stringify( { error: `${ username } is not exists.` } ) )
-
-						return
-					}
-
-					delete users[ username ]
-
-					res.writeHead( 200, { "Content-Type": "application/json" } ).end( JSON.stringify( { username } ) )
-				}
-				catch( error ) {
-
-					res.writeHead( 400, { "Content-Type": "application/json" } )
-					res.end( JSON.stringify( { error: error.message } ) )
-				}
-			} )
-
-			return
+			res.writeHead( 200, { "Content-Type": "application/json" } ).end( JSON.stringify( { username } ) )
 		}
 		else  {
 
 			res.writeHead( 405 )
 		}
 	}
+	else {
+
+		if ( req.url.startsWith( "/users/" ) ) {
+
+			const username = req.url.substr( 7 )
+
+			if ( !( username in users ) ) {
+
+				res.writeHead( 404, { "Content-Type": "application/json" } )
+				res.end( JSON.stringify( { error: `${ username } is not exists.` } ) )
+
+				return
+			}
+
+			res.end( JSON.stringify( users[ username ] ) )
+		}
+		else {
+
+			res.writeHead( 404 )
+		}
+	}
 
 	res.end()
-} )
+}
 
 server.listen( PORT, "127.0.0.1", () => console.info( `:${ PORT }` ) )
